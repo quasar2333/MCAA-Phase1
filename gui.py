@@ -1,131 +1,257 @@
 # gui.py
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox, simpledialog
+from tkinter import ttk, messagebox, simpledialog, scrolledtext
 import threading
 import queue
+import json
+import uuid
 
-from llm_interface import load_provider_configs, get_provider
 from agent_core import Agent
+from llm_interface import load_provider_configs, save_provider_configs, get_provider
 
+class ThreadSafeLogger:
+    """A logger that safely sends messages from a worker thread to the GUI."""
+    def __init__(self, log_queue: queue.Queue):
+        self.queue = log_queue
 
-class AgentThread(threading.Thread):
-    def __init__(self, goal: str, provider_name: str, log_queue: queue.Queue, done_callback):
-        super().__init__(daemon=True)
-        self.goal = goal
-        self.provider_name = provider_name
-        self.log_queue = log_queue
-        self.done_callback = done_callback
+    def __call__(self, message: str):
+        self.queue.put(message)
 
-    def run(self):
-        provider = get_provider(self.provider_name)
-        if not provider:
-            self.log_queue.put(f"Provider '{self.provider_name}' not found.\n")
-            self.done_callback(False)
-            return
+class ThreadSafeInput:
+    """A mechanism to get user input from the GUI for a worker thread."""
+    def __init__(self, root: tk.Tk, title: str):
+        self.root = root
+        self.title = title
+        self.input_queue = queue.Queue(maxsize=1)
+        self.response_queue = queue.Queue(maxsize=1)
 
-        def log(msg: str):
-            self.log_queue.put(msg + "\n")
+    def __call__(self, prompt: str) -> str:
+        # Signal the GUI to ask for input
+        self.input_queue.put(prompt)
+        # Wait for the GUI to provide the input
+        return self.response_queue.get()
 
-        def user_input(prompt: str) -> str:
-            # For GUI, we do a simple dialog
-            return simpledialog.askstring("Input", prompt)
-
-        agent = Agent(self.goal, provider, log, user_input)
-        agent.run()
-        self.done_callback(True)
-
+    def check_for_input_request(self):
+        try:
+            prompt = self.input_queue.get_nowait()
+            # This runs in the GUI thread
+            response = simpledialog.askstring(self.title, prompt, parent=self.root)
+            self.response_queue.put(response or "")
+        except queue.Empty:
+            pass # No input request
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("MCAA-Phase1 GUI")
-        self.geometry("900x600")
+        self.title("MCAA-Phase1 Agent")
+        self.geometry("1200x800")
 
+        self.tasks = {} # Using a dictionary {task_id: task_instance}
         self.log_queue = queue.Queue()
-        self.current_thread = None
+        self.input_handler = ThreadSafeInput(self, "Agent Input Required")
 
-        self._create_widgets()
-        self._load_providers()
-        self.after(200, self._process_log_queue)
+        self._init_ui()
+        self.refresh_provider_list()
+        self.process_log_queue()
 
-    def _create_widgets(self):
-        paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
-        paned.pack(fill=tk.BOTH, expand=True)
+    def _init_ui(self):
+        # Main layout with PanedWindow
+        main_pane = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
+        main_pane.pack(fill=tk.BOTH, expand=True)
 
-        # Left pane - provider and new task
-        left_frame = ttk.Frame(paned, width=200)
-        paned.add(left_frame, weight=1)
+        left_pane = ttk.Frame(main_pane, width=350)
+        main_pane.add(left_pane, weight=1)
 
-        ttk.Label(left_frame, text="Providers").pack(anchor=tk.W, padx=5, pady=5)
-        self.provider_list = ttk.Combobox(left_frame, state="readonly")
-        self.provider_list.pack(fill=tk.X, padx=5)
+        right_pane = ttk.Frame(main_pane)
+        main_pane.add(right_pane, weight=3)
+        
+        # --- Left Pane: Providers and Tasks ---
+        self._create_provider_frame(left_pane)
+        self._create_task_frame(left_pane)
+        
+        # --- Right Pane: Logs ---
+        log_frame = ttk.LabelFrame(right_pane, text="Task Log")
+        log_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.log_area = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD, state=tk.DISABLED)
+        self.log_area.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(left_frame, text="New Task").pack(anchor=tk.W, padx=5, pady=(15,5))
-        self.goal_entry = ttk.Entry(left_frame)
-        self.goal_entry.pack(fill=tk.X, padx=5)
+    def _create_provider_frame(self, parent):
+        frame = ttk.LabelFrame(parent, text="API Providers")
+        frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        self.provider_listbox = tk.Listbox(frame, exportselection=False)
+        self.provider_listbox.pack(fill=tk.X, padx=5, pady=5)
+        self.provider_listbox.bind("<<ListboxSelect>>", self.on_provider_select)
 
-        self.start_btn = ttk.Button(left_frame, text="Start", command=self.start_task)
-        self.start_btn.pack(padx=5, pady=10, fill=tk.X)
+        # Buttons
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(fill=tk.X, padx=5, pady=5)
+        ttk.Button(btn_frame, text="Add/Edit", command=self.add_edit_provider).pack(side=tk.LEFT, expand=True, fill=tk.X)
+        ttk.Button(btn_frame, text="Delete", command=self.delete_provider).pack(side=tk.LEFT, expand=True, fill=tk.X)
 
-        # Middle pane - tasks list
-        middle_frame = ttk.Frame(paned, width=200)
-        paned.add(middle_frame, weight=1)
+    def _create_task_frame(self, parent):
+        frame = ttk.LabelFrame(parent, text="Tasks")
+        frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Buttons
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(fill=tk.X, padx=5, pady=5)
+        ttk.Button(btn_frame, text="New Task", command=self.new_task).pack(side=tk.LEFT, expand=True, fill=tk.X)
+        
+        # Task List (Treeview for more details)
+        self.task_tree = ttk.Treeview(frame, columns=("Status",), show="headings")
+        self.task_tree.heading("#0", text="Goal") # This is a hidden column used for the main text
+        self.task_tree.heading("Status", text="Status")
+        self.task_tree.column("#0", width=180)
+        self.task_tree.column("Status", width=70, anchor=tk.CENTER)
+        
+        self.task_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.task_tree.bind("<<TreeviewSelect>>", self.on_task_select)
 
-        ttk.Label(middle_frame, text="Tasks").pack(anchor=tk.W, padx=5, pady=5)
-        self.task_list = tk.Listbox(middle_frame)
-        self.task_list.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+    # --- Provider Management ---
+    def refresh_provider_list(self):
+        self.provider_listbox.delete(0, tk.END)
+        for p in load_provider_configs():
+            self.provider_listbox.insert(tk.END, p['name'])
 
-        # Right pane - logs
-        right_frame = ttk.Frame(paned)
-        paned.add(right_frame, weight=3)
+    def on_provider_select(self, event=None):
+        # This can be used to pre-fill the "New Task" dialog if needed
+        pass
 
-        ttk.Label(right_frame, text="Logs").pack(anchor=tk.W, padx=5, pady=5)
-        self.log_text = scrolledtext.ScrolledText(right_frame, state="disabled")
-        self.log_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+    def add_edit_provider(self):
+        # A simple dialog for now. A dedicated window would be better for complex edits.
+        # For simplicity, we'll just open the JSON file for the user to edit.
+        messagebox.showinfo("Edit Providers", f"Please edit the 'api_config.json' file directly.\n\nAfter saving the file, you might need to restart the application for changes to take full effect in running tasks.")
+    
+    def delete_provider(self):
+        selections = self.provider_listbox.curselection()
+        if not selections:
+            messagebox.showwarning("No Selection", "Please select a provider to delete.")
+            return
 
-    def _load_providers(self):
-        configs = load_provider_configs()
-        names = [c['name'] for c in configs]
-        self.provider_list['values'] = names
-        if names:
-            self.provider_list.current(0)
+        provider_name = self.provider_listbox.get(selections[0])
+        if messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete the provider '{provider_name}'?"):
+            configs = load_provider_configs()
+            configs = [p for p in configs if p['name'] != provider_name]
+            save_provider_configs(configs)
+            self.refresh_provider_list()
 
-    def _process_log_queue(self):
-        while True:
+    # --- Task Management ---
+    def new_task(self):
+        selections = self.provider_listbox.curselection()
+        if not selections:
+            messagebox.showerror("Error", "Please select an API provider first.")
+            return
+        
+        provider_name = self.provider_listbox.get(selections[0])
+        goal = simpledialog.askstring("New Task", "Enter the task goal:", parent=self)
+        
+        if goal:
+            task_id = str(uuid.uuid4())
+            llm_provider = get_provider(provider_name)
+            if not llm_provider:
+                messagebox.showerror("Error", f"Failed to load provider '{provider_name}'.")
+                return
+
+            task = {
+                "id": task_id,
+                "goal": goal,
+                "provider": llm_provider,
+                "status": "Pending",
+                "log": [],
+                "thread": None
+            }
+            self.tasks[task_id] = task
+            
+            # Add to treeview and start it
+            tree_id = self.task_tree.insert("", tk.END, text=goal, values=("Pending",), iid=task_id)
+            self.start_task(task_id)
+            
+    def start_task(self, task_id):
+        task = self.tasks[task_id]
+        if task['status'] == "Running":
+            return
+
+        self.update_task_status(task_id, "Running")
+        
+        # The agent needs a logger and an input function
+        thread_logger = ThreadSafeLogger(self.log_queue)
+        
+        agent = Agent(
+            goal=task['goal'],
+            llm_provider=task['provider'],
+            log_func=thread_logger,
+            input_func=self.input_handler
+        )
+
+        def agent_runner():
             try:
-                msg = self.log_queue.get_nowait()
-            except queue.Empty:
-                break
-            else:
-                self.log_text.configure(state='normal')
-                self.log_text.insert(tk.END, msg)
-                self.log_text.see(tk.END)
-                self.log_text.configure(state='disabled')
-        self.after(200, self._process_log_queue)
+                agent.run()
+                self.update_task_status(task_id, "Completed")
+            except Exception as e:
+                thread_logger(f"💥 AGENT CRASHED: {e}")
+                self.update_task_status(task_id, "Failed")
+        
+        task['thread'] = threading.Thread(target=agent_runner, daemon=True)
+        task['thread'].start()
 
-    def start_task(self):
-        if self.current_thread and self.current_thread.is_alive():
-            messagebox.showwarning("Running", "A task is already running.")
+    def update_task_status(self, task_id, status):
+        if task_id in self.tasks:
+            self.tasks[task_id]['status'] = status
+            self.task_tree.item(task_id, values=(status,))
+
+    def on_task_select(self, event=None):
+        selections = self.task_tree.selection()
+        if not selections:
             return
-        goal = self.goal_entry.get().strip()
-        if not goal:
-            messagebox.showinfo("Input", "Please enter a task goal.")
-            return
-        provider_name = self.provider_list.get()
-        if not provider_name:
-            messagebox.showinfo("Input", "Please select a provider.")
-            return
-        self.task_list.insert(tk.END, goal)
-        index = self.task_list.size() - 1
+        
+        task_id = selections[0]
+        task = self.tasks.get(task_id)
+        if task:
+            self.display_log_for_task(task)
 
-        def done_callback(success: bool):
-            status = "✅" if success else "❌"
-            self.task_list.delete(index)
-            self.task_list.insert(index, f"{status} {goal}")
+    # --- Logging ---
+    def process_log_queue(self):
+        # Check for input requests from the worker thread
+        self.input_handler.check_for_input_request()
+        
+        try:
+            while True:
+                message = self.log_queue.get_nowait()
+                
+                # Find which task is currently running to associate the log message
+                current_task_id = None
+                for tid, t in self.tasks.items():
+                    if t['status'] == 'Running':
+                        current_task_id = tid
+                        break
+                
+                if current_task_id:
+                    self.tasks[current_task_id]['log'].append(message)
+                
+                # If the message belongs to the currently selected task, display it
+                selections = self.task_tree.selection()
+                if selections and selections[0] == current_task_id:
+                    self.append_log_message(message)
 
-        self.current_thread = AgentThread(goal, provider_name, self.log_queue, done_callback)
-        self.current_thread.start()
+        except queue.Empty:
+            pass
+        finally:
+            self.after(100, self.process_log_queue)
 
+    def display_log_for_task(self, task):
+        self.log_area.config(state=tk.NORMAL)
+        self.log_area.delete(1.0, tk.END)
+        for msg in task['log']:
+            self.log_area.insert(tk.END, msg + "\n")
+        self.log_area.see(tk.END)
+        self.log_area.config(state=tk.DISABLED)
+    
+    def append_log_message(self, message):
+        self.log_area.config(state=tk.NORMAL)
+        self.log_area.insert(tk.END, message + "\n")
+        self.log_area.see(tk.END)
+        self.log_area.config(state=tk.DISABLED)
 
 if __name__ == "__main__":
     app = App()

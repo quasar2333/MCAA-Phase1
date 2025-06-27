@@ -1,27 +1,113 @@
 # llm_interface.py
+import json
+from abc import ABC, abstractmethod
+from typing import Dict, Any, List, Optional
 import openai
-from config import LLM_API_KEY
+import google.generativeai as genai
 
-# 设置API密钥
-openai.api_key = LLM_API_KEY
+from settings import API_CONFIG_FILE
 
-def ask_llm(system_prompt, user_prompt):
-    """
-    与大语言模型进行单次交互的函数。
-    - system_prompt: 定义AI角色的系统提示
-    - user_prompt: 用户的具体请求
-    返回LLM生成的文本响应。
-    """
-    try:
-        response = openai.chat.completions.create(
-            model="gpt-4-turbo-preview",  # 你可以换成任何你正在使用的模型
+# --- Abstract Base Class for LLM Providers ---
+
+class LLMProvider(ABC):
+    """Abstract base class for all LLM API providers."""
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.api_key = config.get('api_key', '')
+        self.models = config.get('models', [])
+        self.selected_model = self.models[0] if self.models else None
+
+    @abstractmethod
+    def ask(self, system_prompt: str, user_prompt: str, model: Optional[str] = None) -> str:
+        """Sends a request to the LLM and returns the response."""
+        pass
+
+    def get_name(self) -> str:
+        return self.config.get('name', 'Unknown')
+
+# --- Concrete Provider Implementations ---
+
+class OpenAIProvider(LLMProvider):
+    """Provider for OpenAI-compatible APIs."""
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self.client = openai.OpenAI(
+            api_key=self.api_key,
+            base_url=config.get('base_url') or None,
+        )
+
+    def ask(self, system_prompt: str, user_prompt: str, model: Optional[str] = None) -> str:
+        if not self.api_key or self.api_key.startswith('sk-YOUR'):
+            raise ValueError(f"API Key for provider '{self.get_name()}' is not configured.")
+        
+        target_model = model or self.selected_model
+        if not target_model:
+            raise ValueError(f"No model selected or available for provider '{self.get_name()}'.")
+            
+        response = self.client.chat.completions.create(
+            model=target_model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.3, # 较低的温度确保输出更稳定和可预测
+            temperature=0.3,
         )
         return response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"与LLM API交互时出错: {e}")
+
+class GoogleProvider(LLMProvider):
+    """Provider for Google's Gemini models."""
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        if self.api_key and not self.api_key.startswith('YOUR_GOOGLE'):
+            genai.configure(api_key=self.api_key)
+
+    def ask(self, system_prompt: str, user_prompt: str, model: Optional[str] = None) -> str:
+        if not self.api_key or self.api_key.startswith('YOUR_GOOGLE'):
+            raise ValueError(f"API Key for provider '{self.get_name()}' is not configured.")
+
+        target_model = model or self.selected_model
+        if not target_model:
+            raise ValueError(f"No model selected or available for provider '{self.get_name()}'.")
+            
+        model_instance = genai.GenerativeModel(
+            model_name=target_model,
+            system_instruction=system_prompt
+        )
+        response = model_instance.generate_content(user_prompt)
+        return response.text.strip()
+
+
+# --- Factory and Management Functions ---
+
+PROVIDER_CLASSES = {
+    "openai": OpenAIProvider,
+    "google": GoogleProvider,
+}
+
+def get_provider(provider_name: str) -> Optional[LLMProvider]:
+    """Factory function to get a provider instance by name."""
+    try:
+        with open(API_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            configs = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
         return None
+
+    for config in configs:
+        if config['name'] == provider_name:
+            provider_type = config.get('type', 'openai')
+            if provider_type in PROVIDER_CLASSES:
+                return PROVIDER_CLASSES[provider_type](config)
+    return None
+
+def load_provider_configs() -> List[Dict[str, Any]]:
+    """Loads all provider configurations from the JSON file."""
+    try:
+        with open(API_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+def save_provider_configs(configs: List[Dict[str, Any]]):
+    """Saves provider configurations to the JSON file."""
+    with open(API_CONFIG_FILE, 'w', encoding='utf-8') as f:
+        json.dump(configs, f, indent=4, ensure_ascii=False)

@@ -24,10 +24,12 @@ def _ask_google(model_id: str, api_key: str, system_prompt: str, user_prompt: st
     import google.generativeai as genai
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(model_id)
-    response = model.generate_content([
-        {"role": "system", "parts": [system_prompt]},
-        {"role": "user", "parts": [user_prompt]}
-    ])
+    # google generative models only accept 'user' and 'model' roles. Use
+    # `system_instruction` to provide the system prompt.
+    response = model.generate_content(
+        [user_prompt],
+        system_instruction=system_prompt
+    )
     return response.text.strip()
 
 def ask_llm(system_prompt: str, user_prompt: str, provider_name: str = DEFAULT_PROVIDER, model_id: str | None = None):

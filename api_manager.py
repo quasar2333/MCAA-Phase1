@@ -18,20 +18,23 @@ def save_providers(providers: List[Dict[str, Any]]):
         json.dump(providers, f, indent=4, ensure_ascii=False)
 
 
-def add_or_update_provider(name: str, provider_type: str, model_id: str, api_key: str):
+def add_or_update_provider(name: str, provider_type: str, base_url: str, api_key: str, models: List[str]):
+    """Add a provider or update existing one."""
     providers = load_providers()
     for p in providers:
         if p['name'] == name:
             p['type'] = provider_type
-            p['model_id'] = model_id
+            p['base_url'] = base_url
             p['api_key'] = api_key
+            p['models'] = models
             break
     else:
         providers.append({
             'name': name,
             'type': provider_type,
-            'model_id': model_id,
-            'api_key': api_key
+            'base_url': base_url,
+            'api_key': api_key,
+            'models': models,
         })
     save_providers(providers)
 

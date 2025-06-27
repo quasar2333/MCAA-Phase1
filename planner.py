@@ -2,7 +2,7 @@
 import json
 from llm_interface import ask_llm
 from memory_manager import load_tools
-from config import DEFAULT_PROVIDER
+from config import DEFAULT_PROVIDER, DEFAULT_MODEL
 
 # 这是我们给LLM定义的角色和指令，非常重要！
 PLANNER_SYSTEM_PROMPT = """
@@ -33,7 +33,7 @@ PLANNER_SYSTEM_PROMPT = """
 ]
 """
 
-def create_plan(goal: str, provider_name: str = DEFAULT_PROVIDER):
+def create_plan(goal: str, provider_name: str = DEFAULT_PROVIDER, model_id: str | None = None):
     """根据用户目标创建计划。"""
     # 加载现有工具，并格式化后提供给LLM作为上下文
     existing_tools = load_tools()
@@ -47,7 +47,7 @@ def create_plan(goal: str, provider_name: str = DEFAULT_PROVIDER):
     user_prompt = f"{tools_context}\n\n【用户目标】:\n{goal}"
 
     print("正在请求LLM进行规划...")
-    plan_str = ask_llm(PLANNER_SYSTEM_PROMPT, user_prompt, provider_name)
+    plan_str = ask_llm(PLANNER_SYSTEM_PROMPT, user_prompt, provider_name, model_id)
 
     if not plan_str:
         return None

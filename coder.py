@@ -9,8 +9,8 @@ CODER_SYSTEM_PROMPT = """
 - 你的输出必须是且只能是纯粹的Python代码。不要包含任何注释、解释、或Markdown标记如 ```python。
 """
 
-def create_code(task_description: str, provider_name: str = DEFAULT_PROVIDER) -> str:
+def create_code(task_description: str, provider_name: str = DEFAULT_PROVIDER, model_id: str | None = None) -> str:
     """根据任务描述生成Python代码。"""
     print(f"正在为任务 '{task_description}' 请求LLM生成代码...")
-    code = ask_llm(CODER_SYSTEM_PROMPT, task_description, provider_name)
+    code = ask_llm(CODER_SYSTEM_PROMPT, task_description, provider_name, model_id)
     return code

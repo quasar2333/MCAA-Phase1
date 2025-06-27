@@ -1,18 +1,18 @@
 # MCAA-Phase1 / 工匠学徒阶段一
 
-This project is a proof of concept for building an AI assistant that can plan, write and execute Python code. It demonstrates a simple workflow where the system plans tasks using a large language model (LLM), generates Python scripts for new tools, executes them and optionally stores successful tools for future use.
+This project is a proof of concept for building an AI assistant that can plan, write and execute Python code. It demonstrates a simple workflow where the system plans tasks using a large language model (LLM), generates Python scripts for new tools, executes them and optionally stores successful tools for future use. A simple Tkinter GUI lets you manage API providers and run multiple tasks in parallel.
 
 **Warning**: the assistant executes generated code directly. Running this code on your machine can be dangerous and may cause data loss or other issues. Use it only for experimental purposes.
 
 ## Requirements
 - Python 3.8+
 - Python packages: at least `openai`. `google-generativeai` is required for Google models.
-- LLM provider settings stored in `api_config.json` (editable via `gui.py`)
+- LLM provider settings stored in `api_config.json` (editable via `gui.py`). Each provider can define multiple model IDs.
 
 ## Usage
 1. Install dependencies (at least `openai`).
-2. Edit or create providers in `api_config.json` or run `python gui.py` for a graphical interface.
-3. Run the agent with `python main.py --provider PROVIDER_NAME` or start the GUI with `python gui.py`.
+2. Edit or create providers in `api_config.json` or run `python gui.py` for a graphical interface. Providers may contain multiple models.
+3. Run the agent with `python main.py --provider PROVIDER_NAME --model MODEL_ID` or start the GUI with `python gui.py`. In the GUI you can create several tasks, start them and monitor their logs.
 
 ## 目录说明
 - `main.py` 负责整体流程控制

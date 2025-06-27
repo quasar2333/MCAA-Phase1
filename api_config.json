@@ -2,7 +2,8 @@
     {
         "name": "default",
         "type": "openai",
-        "model_id": "gpt-4-turbo-preview",
-        "api_key": "YOUR_API_KEY_HERE"
+        "base_url": "",
+        "api_key": "YOUR_API_KEY_HERE",
+        "models": ["gpt-4-turbo-preview"]
     }
 ]

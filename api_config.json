@@ -1,0 +1,8 @@
+[
+    {
+        "name": "default",
+        "type": "openai",
+        "model_id": "gpt-4-turbo-preview",
+        "api_key": "YOUR_API_KEY_HERE"
+    }
+]

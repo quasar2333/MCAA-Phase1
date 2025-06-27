@@ -39,6 +39,11 @@ def ask_llm(system_prompt: str, user_prompt: str, provider_name: str = DEFAULT_P
         print(f"未找到名称为 '{provider_name}' 的提供商配置")
         return None
 
+    api_key = provider.get('api_key', '')
+    if not api_key or api_key.startswith('YOUR_API'):
+        print(f"Provider '{provider_name}' 的 API key 未设置")
+        return None
+
     try:
         model_id = model_id or (provider.get('models') or [DEFAULT_MODEL])[0]
         if provider['type'] == 'openai':

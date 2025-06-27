@@ -11,8 +11,8 @@ This project is a proof of concept for building an AI assistant that can plan, w
 
 ## Usage
 1. Install dependencies (at least `openai`).
-2. Edit or create providers in `api_config.json` or run `python gui.py` for a graphical interface. Providers may contain multiple models.
-3. Run the agent with `python main.py --provider PROVIDER_NAME --model MODEL_ID` or start the GUI with `python gui.py`. In the GUI you can create several tasks, start them and monitor their logs.
+2. Edit or create providers in `api_config.json` or run `python gui.py` for a graphical interface. **Be sure to replace the placeholder API key** with your real key. Each provider may contain multiple model IDs.
+3. Run the agent with `python main.py --provider PROVIDER_NAME --model MODEL_ID` or start the GUI with `python gui.py`. In the GUI you can create several tasks, start them and monitor their logs. If you do not specify `--provider`, the value in `config.py` is used.
 
 ## 目录说明
 - `main.py` 负责整体流程控制

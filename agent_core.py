@@ -7,7 +7,6 @@ import memory_manager
 from llm_interface import LLMProvider
 from typing import Callable, Optional, List, Dict, Any
 
-
 class Agent:
     def __init__(self, goal: str, llm_provider: LLMProvider, log_func: Callable[[str], None], input_func: Callable[[str], str]):
         self.goal = goal
@@ -86,6 +85,6 @@ class Agent:
                 self.log("当前步骤执行失败，任务中断。")
                 self.log("（在未来版本中，这里将触发调试循环）")
                 self.log("‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️‼️")
-                return
+                return # 中断当前任务
 
         self.log("\n🎉 所有步骤执行完毕，任务成功完成！")

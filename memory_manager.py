@@ -13,7 +13,7 @@ def load_tools() -> List[Dict[str, Any]]:
         # 如果文件不存在或为空，返回一个空列表
         return []
 
-def save_tool(name: str, description: str, code: str):
+def save_tool(name: str, description: str, code: str, log_func=print):
     """将一个新工具保存到JSON文件中。"""
     tools = load_tools()
     # 检查工具是否已存在，如果存在则更新
@@ -22,13 +22,14 @@ def save_tool(name: str, description: str, code: str):
             tool['description'] = description
             tool['code'] = code
             break
-    else: # for-else循环，如果循环正常结束（没有break），则执行
+    else:  # for-else循环，如果循环正常结束（没有break），则执行
         tools.append({
             "name": name,
             "description": description,
-            "code": code
+            "code": code,
         })
 
     with open(TOOL_LIBRARY_FILE, 'w', encoding='utf-8') as f:
         json.dump(tools, f, indent=4, ensure_ascii=False)
-    print(f"工具 '{name}' 已成功保存。")
+    if log_func:
+        log_func(f"工具 '{name}' 已成功保存。")

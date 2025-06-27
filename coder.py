@@ -13,4 +13,8 @@ def create_code(task_description: str, provider_name: str = DEFAULT_PROVIDER, mo
     """根据任务描述生成Python代码。"""
     print(f"正在为任务 '{task_description}' 请求LLM生成代码...")
     code = ask_llm(CODER_SYSTEM_PROMPT, task_description, provider_name, model_id)
+    if code and code.startswith("```"):
+        code = code.strip().split("\n", 1)[1] if "\n" in code else code.strip("`")
+        if code.endswith("```"):
+            code = code[:-3].strip()
     return code

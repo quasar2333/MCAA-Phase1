@@ -59,7 +59,7 @@ def run_agent(goal: str, provider_name: str = DEFAULT_PROVIDER, model_id: str | 
 
         if success and task_type == "CREATE_NEW_TOOL":
             save_name = f"{tool_name or 'tool'}_{int(time.time())}"
-            memory_manager.save_tool(save_name, details, script_code)
+            memory_manager.save_tool(save_name, details, script_code, log)
         if not success:
             error_counts[output] = error_counts.get(output, 0) + 1
             if error_counts[output] >= 3:

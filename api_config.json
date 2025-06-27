@@ -1,0 +1,9 @@
+[
+    {
+        "name": "default",
+        "type": "openai",
+        "base_url": "",
+        "api_key": "YOUR_API_KEY_HERE",
+        "models": ["gpt-4-turbo-preview"]
+    }
+]

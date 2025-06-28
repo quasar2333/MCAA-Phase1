@@ -135,3 +135,11 @@ python gui.py
 - **main** – 命令行模式入口。
 - **settings** – 配置文件及生成脚本的路径设置。
 
+
+### Packaging for Windows
+
+You can create a standalone Windows executable using `PyInstaller`. A helper script `package_app.bat` is provided:
+```cmd
+package_app.bat
+```
+The generated executable will appear in the `dist` folder.

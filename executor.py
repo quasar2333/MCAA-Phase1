@@ -33,26 +33,30 @@ def run_script(script_code: str, script_name: str, log_func: Optional[Callable[[
         os.makedirs(SCRIPTS_DIR)
     script_path = os.path.join(SCRIPTS_DIR, script_name)
     try:
-        default_encoding = sys.getdefaultencoding()
-        with open(script_path, 'w', encoding=default_encoding, errors='ignore') as f:
+        # Always use UTF-8 for writing scripts
+        with open(script_path, 'w', encoding='utf-8') as f:
             f.write(script_code)
         if log_func: log_func(f"📜 脚本已保存至: {script_path}")
+
         if log_func: log_func(f"🚀 正在执行脚本: {script_name}...")
-        result = subprocess.run([sys.executable, script_path], capture_output=True, check=False)
-        try:
-            stdout = result.stdout.decode('utf-8')
-        except UnicodeDecodeError:
-            stdout = result.stdout.decode(default_encoding, errors='replace')
-        try:
-            stderr = result.stderr.decode('utf-8')
-        except UnicodeDecodeError:
-            stderr = result.stderr.decode(default_encoding, errors='replace')
+        # Use text=True and encoding='utf-8' for consistent output handling
+        result = subprocess.run(
+            [sys.executable, script_path],
+            capture_output=True,
+            text=True,  # Decodes output using 'encoding'
+            encoding='utf-8',
+            errors='replace', # How to handle decoding errors
+            check=False
+        )
+
         if result.returncode == 0:
             if log_func: log_func("✅ 脚本执行成功。")
-            return True, stdout
+            return True, result.stdout
         else:
             if log_func: log_func("❌ 脚本执行失败。")
-            return False, stderr
+            # Combine stdout and stderr for error context, as errors might print to stdout
+            error_output = result.stdout + result.stderr
+            return False, error_output if error_output else "脚本执行失败，无输出。"
     except Exception as e:
         if log_func: log_func(f"💥 执行脚本时发生意外错误: {e}")
         return False, str(e)

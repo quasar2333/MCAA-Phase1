@@ -12,10 +12,17 @@ from gui_provider_editor import ProviderEditor
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("MCAA-Phase4 Awakening")
+        self.title("MCAA-Phase4 觉醒")
         self.geometry("1200x800")
-        self.tasks = {} 
+        self.tasks = {}
         self.log_queue = queue.Queue()
+        self.status_display_map = {
+            "Initializing": "初始化",
+            "Running": "运行中",
+            "Completed": "已完成",
+            "Failed": "失败",
+            "User Action Required": "需要用户操作",
+        }
         self._init_ui()
         self.refresh_provider_list()
         self.process_gui_events()
@@ -31,7 +38,7 @@ class App(tk.Tk):
         self._create_provider_frame(left_pane)
         self._create_task_frame(left_pane)
         
-        log_frame = ttk.LabelFrame(right_pane, text="Task Log")
+        log_frame = ttk.LabelFrame(right_pane, text="任务日志")
         log_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.log_area = scrolledtext.ScrolledText(log_frame, wrap=tk.WORD, state=tk.DISABLED, font=("Consolas", 10))
         self.log_area.pack(fill=tk.BOTH, expand=True)
@@ -39,7 +46,7 @@ class App(tk.Tk):
     # --- ALL FOLLOWING METHODS MUST BE AT THIS INDENTATION LEVEL ---
 
     def _create_provider_frame(self, parent):
-        frame = ttk.LabelFrame(parent, text="API Providers")
+        frame = ttk.LabelFrame(parent, text="API提供者")
         frame.pack(fill=tk.X, padx=5, pady=5, ipady=5)
         
         self.provider_listbox = tk.Listbox(frame, exportselection=False)
@@ -47,15 +54,15 @@ class App(tk.Tk):
 
         btn_frame = ttk.Frame(frame)
         btn_frame.pack(fill=tk.X, padx=5)
-        ttk.Button(btn_frame, text="Add", command=self.add_provider).pack(side=tk.LEFT, expand=True, fill=tk.X)
-        ttk.Button(btn_frame, text="Edit", command=self.edit_provider).pack(side=tk.LEFT, expand=True, fill=tk.X)
-        ttk.Button(btn_frame, text="Delete", command=self.delete_provider).pack(side=tk.LEFT, expand=True, fill=tk.X)
+        ttk.Button(btn_frame, text="新增", command=self.add_provider).pack(side=tk.LEFT, expand=True, fill=tk.X)
+        ttk.Button(btn_frame, text="编辑", command=self.edit_provider).pack(side=tk.LEFT, expand=True, fill=tk.X)
+        ttk.Button(btn_frame, text="删除", command=self.delete_provider).pack(side=tk.LEFT, expand=True, fill=tk.X)
 
     def _create_task_frame(self, parent):
-        frame = ttk.LabelFrame(parent, text="Tasks")
+        frame = ttk.LabelFrame(parent, text="任务")
         frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        ttk.Button(frame, text="New Task", command=self.new_task).pack(fill=tk.X, padx=5, pady=5)
+        ttk.Button(frame, text="新建任务", command=self.new_task).pack(fill=tk.X, padx=5, pady=5)
 
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", self.filter_tasks)
@@ -63,8 +70,8 @@ class App(tk.Tk):
         search_entry.pack(fill=tk.X, padx=5, pady=(0, 5))
         
         self.task_tree = ttk.Treeview(frame, columns=("Status",), show="tree headings")
-        self.task_tree.heading("#0", text="Task")
-        self.task_tree.heading("Status", text="Status")
+        self.task_tree.heading("#0", text="任务")
+        self.task_tree.heading("Status", text="状态")
         self.task_tree.column("#0", width=200, anchor=tk.W)
         self.task_tree.column("Status", width=80, anchor=tk.CENTER)
         
@@ -136,10 +143,10 @@ class App(tk.Tk):
         self.task_menu.delete(0, tk.END)
         status = task.get("status")
         if status not in ["Running", "Initializing"]:
-            self.task_menu.add_command(label="Rerun Task", command=lambda: self.rerun_task(row_id))
-            self.task_menu.add_command(label="Iterate/Modify...", command=lambda: self.iterate_task(row_id))
+            self.task_menu.add_command(label="重新运行任务", command=lambda: self.rerun_task(row_id))
+            self.task_menu.add_command(label="迭代/修改...", command=lambda: self.iterate_task(row_id))
             self.task_menu.add_separator()
-        self.task_menu.add_command(label="Delete Task", command=lambda: self.delete_task(row_id))
+        self.task_menu.add_command(label="删除任务", command=lambda: self.delete_task(row_id))
         self.task_menu.post(event.x_root, event.y_root)
 
     def rerun_task(self, task_id):
@@ -150,8 +157,11 @@ class App(tk.Tk):
     def iterate_task(self, task_id):
         task_data = self.tasks.get(task_id)
         if not task_data: return
-        modification_request = simpledialog.askstring("Iterate Task", 
-            f"Modifying task: '{task_data['title']}'\n\nEnter your new requirements:", parent=self)
+        modification_request = simpledialog.askstring(
+            "迭代任务",
+            f"正在修改任务: '{task_data['title']}'\n\n请输入新的需求:",
+            parent=self
+        )
         if modification_request:
             agent_instance = task_data.get("agent_instance")
             previous_context = {
@@ -165,34 +175,35 @@ class App(tk.Tk):
     def new_task(self):
         selections = self.provider_listbox.curselection()
         if not selections:
-            messagebox.showerror("Error", "Please select an API provider first.")
+            messagebox.showerror("错误", "请先选择一个API提供者。")
             return
         provider_name = self.provider_listbox.get(selections[0])
-        goal = simpledialog.askstring("New Task", "Enter the task goal:", parent=self)
+        goal = simpledialog.askstring("新建任务", "请输入任务目标:", parent=self)
         if not goal: return
-        verify = messagebox.askyesno("Self-Verification", "Enable self-verification mode?", parent=self)
+        verify = messagebox.askyesno("自我验证", "是否启用自我验证模式?", parent=self)
         llm_provider = get_provider(provider_name)
-        if not llm_provider: 
-            messagebox.showerror("Error", f"Could not initialize provider '{provider_name}'.")
+        if not llm_provider:
+            messagebox.showerror("错误", f"无法初始化提供者 '{provider_name}'。")
             return
         task_id = str(uuid.uuid4())
         placeholder_title = goal[:40] + '...' if len(goal) > 40 else goal
         task_data = { "id": task_id, "title": placeholder_title, "goal": goal, "provider": llm_provider, 
                       "verify": verify, "status": "Initializing", "log": [], "thread": None, "agent_instance": None }
         self.tasks[task_id] = task_data
-        self.task_tree.insert("", tk.END, text=placeholder_title, values=("Initializing",), iid=task_id)
+        display_status = self.status_display_map.get("Initializing", "Initializing")
+        self.task_tree.insert("", tk.END, text=placeholder_title, values=(display_status,), iid=task_id)
         threading.Thread(target=self._get_title_and_start_agent, args=(task_id,), daemon=True).start()
 
     def _get_title_and_start_agent(self, task_id):
         task_data = self.tasks.get(task_id)
         if not task_data: return
         try:
-            title_prompt = f"Summarize the following user goal into a short title of 3-5 words.\n\nUser Goal: '{task_data['goal']}'"
+            title_prompt = f"请将以下用户目标概括成3-5个词的简短标题:\n\n用户目标: '{task_data['goal']}'"
             title = task_data['provider'].ask("You are a helpful assistant that creates short, descriptive titles.", title_prompt)
             self.after(0, lambda: self.task_tree.item(task_id, text=title))
             task_data['title'] = title
         except Exception as e:
-            log_msg = f"⚠️ Could not summarize goal: {e}."
+            log_msg = f"⚠️ 无法生成标题: {e}."
             self.log_queue.put({"task_id": task_id, "message": log_msg})
         self.start_task(task_id, task_data, None)
 
@@ -224,7 +235,7 @@ class App(tk.Tk):
     def delete_task(self, task_id):
         if not task_id in self.tasks: return
         task_title = self.tasks[task_id]['title']
-        if messagebox.askyesno("Confirm Deletion", f"Delete task '{task_title}'?"):
+        if messagebox.askyesno("确认删除", f"删除任务 '{task_title}'?"):
             if self.task_tree.exists(task_id):
                 self.task_tree.delete(task_id)
             del self.tasks[task_id]
@@ -269,7 +280,7 @@ class App(tk.Tk):
         selections = self.provider_listbox.curselection()
         if not selections: return
         provider_name = self.provider_listbox.get(selections[0])
-        if messagebox.askyesno("Confirm Deletion", f"Delete provider '{provider_name}'?"):
+        if messagebox.askyesno("确认删除", f"删除提供者 '{provider_name}'?"):
             configs = load_provider_configs()
             save_provider_configs([p for p in configs if p['name'] != provider_name])
             self.refresh_provider_list()
@@ -292,15 +303,16 @@ class App(tk.Tk):
         def _update():
             if task_id in self.tasks:
                 self.tasks[task_id]['status'] = status
+                display_status = self.status_display_map.get(status, status)
                 if self.task_tree.exists(task_id):
-                    self.task_tree.item(task_id, values=(status,), tags=(status,))
+                    self.task_tree.item(task_id, values=(display_status,), tags=(status,))
         self.after(0, _update)
 
 if __name__ == "__main__":
     try:
         from gui_provider_editor import ProviderEditor
     except ImportError:
-        print("Fatal: Could not find 'gui_provider_editor.py'. Please ensure it exists.")
+        print("Fatal: 无法找到 'gui_provider_editor.py'，请确认文件存在。")
         exit(1)
         
     app = App()

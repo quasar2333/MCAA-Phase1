@@ -31,11 +31,11 @@ class OpenAIProvider(LLMProvider):
 
     def ask(self, system_prompt: str, user_prompt: str, model: Optional[str] = None) -> str:
         if not self.api_key or self.api_key.startswith('sk-YOUR'):
-            raise ValueError(f"API Key for provider '{self.get_name()}' is not configured.")
+            raise ValueError(f"提供者 '{self.get_name()}' 的 API 密钥未配置。")
         
         target_model = model or self.selected_model
         if not target_model:
-            raise ValueError(f"No model selected or available for provider '{self.get_name()}'.")
+            raise ValueError(f"提供者 '{self.get_name()}' 没有可用模型或未选择模型。")
             
         response = self.client.chat.completions.create(
             model=target_model,
@@ -55,11 +55,11 @@ class GoogleProvider(LLMProvider):
 
     def ask(self, system_prompt: str, user_prompt: str, model: Optional[str] = None) -> str:
         if not self.api_key or self.api_key.startswith('YOUR_GOOGLE'):
-            raise ValueError(f"API Key for provider '{self.get_name()}' is not configured.")
+            raise ValueError(f"提供者 '{self.get_name()}' 的 API 密钥未配置。")
 
         target_model = model or self.selected_model
         if not target_model:
-            raise ValueError(f"No model selected or available for provider '{self.get_name()}'.")
+            raise ValueError(f"提供者 '{self.get_name()}' 没有可用模型或未选择模型。")
             
         model_instance = genai.GenerativeModel(
             model_name=target_model,
@@ -87,7 +87,7 @@ def get_provider(provider_name: str) -> Optional[LLMProvider]:
                 try:
                     return PROVIDER_CLASSES[provider_type](config)
                 except Exception as e:
-                    print(f"Failed to initialize provider {provider_name}: {e}")
+                    print(f"初始化提供者 {provider_name} 失败: {e}")
                     return None
     return None
 

@@ -14,12 +14,12 @@ def main():
 
     llm_provider = get_provider(args.provider)
     if not llm_provider:
-        print(f"Error: Provider '{args.provider}' not found in api_config.json.")
+        print(f"错误：在 api_config.json 中未找到提供者 '{args.provider}'。")
         return
 
     if args.model:
         if args.model not in llm_provider.models:
-            print(f"Warning: Model '{args.model}' not listed. Attempting to use it anyway.")
+            print(f"警告：模型 '{args.model}' 未在配置中列出，将尝试继续使用。")
         llm_provider.selected_model = args.model
 
     def cli_log(message: str):

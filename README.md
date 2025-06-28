@@ -103,7 +103,7 @@ MCAA-Phase1 是一个AI驱动的自动化任务执行代理。它通过集成大
 ```bash
 pip install -r requirements.txt
 ```
-2. 在 `api_config.json` 中配置 API 密钥和模型。
+2. 在 `api_config.json` 中配置 API 密钥和模型（当然也可以在GUI界面中配置）。
 
 ### 命令行使用
 ```bash

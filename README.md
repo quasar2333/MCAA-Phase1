@@ -41,8 +41,6 @@ Use the interface to manage providers and tasks.
 - **settings** – defines file locations for configurations and generated scripts.
 
 ## 介绍
-MCAA‑Phase1 是一个经过重构的 AI Agent，既可以在命令行中运行，也提供图形界面。它通过调用大型语言模型来规划、生成、执行并验证 Python 工具。
-
 
 ### 1. 项目概述
 

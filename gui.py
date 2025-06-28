@@ -51,6 +51,12 @@ class App(tk.Tk):
         
         self.provider_listbox = tk.Listbox(frame, exportselection=False)
         self.provider_listbox.pack(fill=tk.X, padx=5, pady=5)
+        self.provider_listbox.bind("<<ListboxSelect>>", self.on_provider_selected)
+
+        ttk.Label(frame, text="选择模型:").pack(fill=tk.X, padx=5, pady=(5,0))
+        self.model_var = tk.StringVar()
+        self.model_combobox = ttk.Combobox(frame, textvariable=self.model_var, state="readonly")
+        self.model_combobox.pack(fill=tk.X, padx=5, pady=5)
 
         btn_frame = ttk.Frame(frame)
         btn_frame.pack(fill=tk.X, padx=5)
@@ -85,6 +91,30 @@ class App(tk.Tk):
         self.task_menu = tk.Menu(self, tearoff=0)
         self.task_tree.bind("<Button-3>", self.show_task_menu)
         self.task_tree.bind("<<TreeviewSelect>>", self.on_task_select)
+
+    def on_provider_selected(self, event=None):
+        selections = self.provider_listbox.curselection()
+        if not selections:
+            self.model_combobox['values'] = []
+            self.model_var.set('')
+            return
+
+        provider_name = self.provider_listbox.get(selections[0])
+        provider = get_provider(provider_name)
+        if provider:
+            models = provider.get_available_models()
+            self.model_combobox['values'] = models
+            if models:
+                # Set to current selected model of provider, or first if not set/invalid
+                if provider.selected_model and provider.selected_model in models:
+                    self.model_var.set(provider.selected_model)
+                else:
+                    self.model_var.set(models[0])
+            else:
+                self.model_var.set('')
+        else:
+            self.model_combobox['values'] = []
+            self.model_var.set('')
 
     def process_gui_events(self):
         try:
@@ -178,13 +208,28 @@ class App(tk.Tk):
             messagebox.showerror("错误", "请先选择一个API提供者。")
             return
         provider_name = self.provider_listbox.get(selections[0])
+
+        selected_model_id = self.model_var.get()
+        if not selected_model_id:
+            messagebox.showerror("错误", "请为选定的提供者选择一个模型。")
+            return
+
         goal = simpledialog.askstring("新建任务", "请输入任务目标:", parent=self)
         if not goal: return
         verify = messagebox.askyesno("自我验证", "是否启用自我验证模式?", parent=self)
+
         llm_provider = get_provider(provider_name)
         if not llm_provider:
             messagebox.showerror("错误", f"无法初始化提供者 '{provider_name}'。")
             return
+
+        # Set the selected model on the provider instance
+        if selected_model_id in llm_provider.get_available_models():
+            llm_provider.selected_model = selected_model_id
+        else:
+            messagebox.showerror("错误", f"模型 '{selected_model_id}' 对于提供者 '{provider_name}' 无效。")
+            return
+
         task_id = str(uuid.uuid4())
         placeholder_title = goal[:40] + '...' if len(goal) > 40 else goal
         task_data = { "id": task_id, "title": placeholder_title, "goal": goal, "provider": llm_provider, 
@@ -212,8 +257,13 @@ class App(tk.Tk):
         self.update_task_status(task_id, "Running")
         if self.task_tree.selection() and self.task_tree.selection()[0] == task_id:
              self.on_task_select()
+
+        from datetime import datetime
         def thread_logger(message: str):
-            self.log_queue.put({"task_id": task_id, "message": message})
+            timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3] # Include milliseconds
+            formatted_message = f"[{timestamp}] {message}"
+            self.log_queue.put({"task_id": task_id, "message": formatted_message})
+
         agent = Agent(task_data['goal'], task_data['provider'], thread_logger, task_data['verify'], previous_context)
         task_data['agent_instance'] = agent
         def agent_runner():
@@ -248,9 +298,17 @@ class App(tk.Tk):
             self.provider_listbox.insert(tk.END, p['name'])
         if selected_index:
             try:
-                self.provider_listbox.selection_set(selected_index[0])
-            except tk.TclError:
-                pass
+                current_selection = selected_index[0]
+                self.provider_listbox.selection_set(current_selection)
+                self.provider_listbox.see(current_selection) # Ensure it's visible
+                self.on_provider_selected() # Update model list
+            except tk.TclError: # Selection might be invalid if list changed
+                self.model_combobox['values'] = []
+                self.model_var.set('')
+        else:
+            self.model_combobox['values'] = []
+            self.model_var.set('')
+
 
     def add_provider(self):
         editor = ProviderEditor(self)

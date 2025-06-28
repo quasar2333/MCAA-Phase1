@@ -3,13 +3,12 @@ import argparse
 from agent_core import Agent
 from llm_interface import get_provider
 
-
 def main():
-    """主函数，运行Agent的命令行交互。"""
-    parser = argparse.ArgumentParser(description="MCAA-Phase1: A simple AI Agent")
+    parser = argparse.ArgumentParser(description="MCAA-Phase2: The Journeyman Agent")
     parser.add_argument("--provider", help="Name of the API provider from api_config.json", required=True)
     parser.add_argument("--model", help="Specific model to use (optional)", default=None)
     parser.add_argument("--goal", help="The task for the agent to perform", default=None)
+    parser.add_argument("--verify", action='store_true', help="Enable self-verification mode")
     
     args = parser.parse_args()
 
@@ -20,31 +19,27 @@ def main():
 
     if args.model:
         if args.model not in llm_provider.models:
-            print(f"Warning: Model '{args.model}' not listed for provider '{args.provider}'. Attempting to use it anyway.")
+            print(f"Warning: Model '{args.model}' not listed. Attempting to use it anyway.")
         llm_provider.selected_model = args.model
 
     def cli_log(message: str):
         print(message)
 
-    def cli_input(prompt: str) -> str:
-        return input(prompt)
-
     if args.goal:
-        agent = Agent(args.goal, llm_provider, cli_log, cli_input)
+        agent = Agent(args.goal, llm_provider, cli_log, args.verify)
         agent.run()
     else:
         print("="*50)
-        print("欢迎使用 MCAA-Phase1: 工匠学徒 Agent (CLI模式)")
+        print("欢迎使用 MCAA-Phase2: 熟练工匠 Agent (CLI模式)")
         print("="*50)
         while True:
             try:
                 goal = input("\n请输入你的任务目标 (或输入 'exit' 退出): ")
-                if goal.lower() == 'exit':
-                    break
-                if not goal:
-                    continue
+                if goal.lower() == 'exit': break
+                if not goal: continue
                 
-                agent = Agent(goal, llm_provider, cli_log, cli_input)
+                verify_choice = input("是否开启自我验证模式? (y/n): ").lower()
+                agent = Agent(goal, llm_provider, cli_log, verify_choice == 'y')
                 agent.run()
 
             except KeyboardInterrupt:

@@ -7,10 +7,7 @@ import google.generativeai as genai
 
 from settings import API_CONFIG_FILE
 
-# --- Abstract Base Class for LLM Providers ---
-
 class LLMProvider(ABC):
-    """Abstract base class for all LLM API providers."""
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.api_key = config.get('api_key', '')
@@ -19,16 +16,12 @@ class LLMProvider(ABC):
 
     @abstractmethod
     def ask(self, system_prompt: str, user_prompt: str, model: Optional[str] = None) -> str:
-        """Sends a request to the LLM and returns the response."""
         pass
 
     def get_name(self) -> str:
         return self.config.get('name', 'Unknown')
 
-# --- Concrete Provider Implementations ---
-
 class OpenAIProvider(LLMProvider):
-    """Provider for OpenAI-compatible APIs."""
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.client = openai.OpenAI(
@@ -55,7 +48,6 @@ class OpenAIProvider(LLMProvider):
         return response.choices[0].message.content.strip()
 
 class GoogleProvider(LLMProvider):
-    """Provider for Google's Gemini models."""
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         if self.api_key and not self.api_key.startswith('YOUR_GOOGLE'):
@@ -76,16 +68,12 @@ class GoogleProvider(LLMProvider):
         response = model_instance.generate_content(user_prompt)
         return response.text.strip()
 
-
-# --- Factory and Management Functions ---
-
 PROVIDER_CLASSES = {
     "openai": OpenAIProvider,
     "google": GoogleProvider,
 }
 
 def get_provider(provider_name: str) -> Optional[LLMProvider]:
-    """Factory function to get a provider instance by name."""
     try:
         with open(API_CONFIG_FILE, 'r', encoding='utf-8') as f:
             configs = json.load(f)
@@ -96,11 +84,14 @@ def get_provider(provider_name: str) -> Optional[LLMProvider]:
         if config['name'] == provider_name:
             provider_type = config.get('type', 'openai')
             if provider_type in PROVIDER_CLASSES:
-                return PROVIDER_CLASSES[provider_type](config)
+                try:
+                    return PROVIDER_CLASSES[provider_type](config)
+                except Exception as e:
+                    print(f"Failed to initialize provider {provider_name}: {e}")
+                    return None
     return None
 
 def load_provider_configs() -> List[Dict[str, Any]]:
-    """Loads all provider configurations from the JSON file."""
     try:
         with open(API_CONFIG_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
@@ -108,6 +99,5 @@ def load_provider_configs() -> List[Dict[str, Any]]:
         return []
 
 def save_provider_configs(configs: List[Dict[str, Any]]):
-    """Saves provider configurations to the JSON file."""
     with open(API_CONFIG_FILE, 'w', encoding='utf-8') as f:
         json.dump(configs, f, indent=4, ensure_ascii=False)

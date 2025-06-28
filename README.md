@@ -1,6 +1,6 @@
 # MCAA-Phase1
 
-## Overview (English)
+## Overview 
 MCAA-Phase1 is a refactored AI agent that can operate through a command line interface or a graphical user interface. It orchestrates large language model calls to plan, generate, execute and verify Python tools.
 
 ### Setup
@@ -40,7 +40,7 @@ Use the interface to manage providers and tasks.
 - **main** – entry point for CLI mode.
 - **settings** – defines file locations for configurations and generated scripts.
 
-## 中文介绍
+## 介绍
 MCAA‑Phase1 是一个经过重构的 AI Agent，既可以在命令行中运行，也提供图形界面。它通过调用大型语言模型来规划、生成、执行并验证 Python 工具。
 
 ### 安装
